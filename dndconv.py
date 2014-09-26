@@ -1,10 +1,12 @@
 # dndconv (Drag&Drop convertor)
-import sys, os, math, shlex, queue, threading, subprocess
+import sys, os, math, shlex, queue, threading, subprocess, multiprocessing
 from PyQt4 import QtGui, QtCore
 import ui_settings
 
-# todo: pridaj notifikacie do desktop-menu
+# todo: ukladaj settingsi
 # todo: implementuj file-dialog (v settingsoch)
+# todo: pridaj notifikacie do desktop-menu
+# todo: prejdi na multiprocessing
 
 class main_window(QtGui.QMainWindow):
 	def __init__(self):
@@ -71,6 +73,7 @@ class main_window(QtGui.QMainWindow):
 
 	def _event_job_done(self):
 		self._ndone_files += 1
+		self._counter.setText('%d/%d' % (self._ndone_files, self._nfiles_to_extract))
 
 	def _create_extract_job(self, video_file):
 		out_dir = os.path.expanduser(self._settings_dlg.output_directory())
@@ -93,11 +96,14 @@ class main_window(QtGui.QMainWindow):
 			w.start()
 
 	def _hire_workers(self):
-		# todo: podla poctu jadier naalokuj vlakna
-		w1 = worker(self._jobs)
-		self.connect(w1, QtCore.SIGNAL('nojobs'), self._event_extraction_stop)
-		self.connect(w1, QtCore.SIGNAL('jobdone'), self._event_job_done)
-		return [w1]
+		ncores = min(multiprocessing.cpu_count(), 1)
+		workers = []
+		for n in range(0, ncores):
+			w = worker(self._jobs)
+			self.connect(w, QtCore.SIGNAL('nojobs'), self._event_extraction_stop)
+			self.connect(w, QtCore.SIGNAL('jobdone'), self._event_job_done)
+			workers.append(w)
+		return workers
 
 	def _append_new_job(self, command):
 		self._jobs.put(job(command))
