@@ -112,9 +112,9 @@ class job:
 		self._proc = None
 
 	def run(self):
-		# subprocess.call(self._command)
 		self._proc = subprocess.Popen(self._command)
 		self._proc.wait()
+		self._proc = None
 
 	def cancel(self):
 		if self._proc:
