@@ -23,6 +23,12 @@ class main_window(QtGui.QMainWindow):
 		self._nfiles_to_extract = 0
 		self._ndone_files = 0
 
+		# actions
+		self._settings_act = QtGui.QAction('Settings ...', self)
+		self._settings_act.triggered.connect(self._open_settings_dialog)
+		self.addAction(self._settings_act)
+		self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
+
 		# concurent
 		self._jobs = queue.Queue()  # job queue
 		self._workers = self._hire_workers()
@@ -77,6 +83,10 @@ class main_window(QtGui.QMainWindow):
 
 	def _append_new_job(self, command):
 		self._jobs.put(job(command))
+
+	def _open_settings_dialog(self):
+		# todo: implement settings
+		pass
 
 
 class job:
