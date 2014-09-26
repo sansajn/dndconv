@@ -1,9 +1,8 @@
+# dndconv (Drag&Drop convertor)
 import sys, os, math, shlex, queue, threading, subprocess
 from PyQt4 import QtGui, QtCore
 import ui_settings
 
-# todo: ukonci vlakna pred skoncenim
-# todo: premenuj na dndconv (drag&drop convertor)
 # todo: pridaj notifikacie do desktop-menu
 # todo: implementuj file-dialog (v settingsoch)
 
@@ -57,6 +56,11 @@ class main_window(QtGui.QMainWindow):
 	def dragEnterEvent(self, event):
 		event.acceptProposedAction()
 
+	def closeEvent(self, event):
+		for w in self._workers:
+			w.retire()
+		QtGui.QMainWindow.closeEvent(self, event)
+
 	def _event_extraction_start(self):
 		self._counter.setText('%d/%d' % (self._ndone_files, self._nfiles_to_extract))
 		self._animation.start_animation()
@@ -105,24 +109,44 @@ class main_window(QtGui.QMainWindow):
 class job:
 	def __init__(self, command):
 		self._command = command
+		self._proc = None
 
 	def run(self):
-		subprocess.call(self._command)
+		# subprocess.call(self._command)
+		self._proc = subprocess.Popen(self._command)
+		self._proc.wait()
+
+	def cancel(self):
+		if self._proc:
+			self._proc.kill()
 
 class worker(threading.Thread, QtCore.QObject):
 	'abstrakcia pre vlakno'
 	def __init__(self, jobs):
-		threading.Thread.__init__(self)
-		QtCore.QObject.__init__(self)
+		threading.Thread.__init__(self), QtCore.QObject.__init__(self)
 		self._jobs = jobs
+		self._current_job = None
+		self._retire = False
 
 	def run(self):
-		while True:
-			j = self._jobs.get()
-			j.run()
-			self._notify_job_done()
-			if self._jobs.empty():
-				self._notify_no_jobs()
+		while not self._retire:
+			try:
+				j = self._jobs.get(timeout=1)
+				self._current_job = j
+				j.run()
+				self._notify_job_done()
+				if self._jobs.empty():
+					self._notify_no_jobs()
+			except queue.Empty as e:
+				if not self._retire:
+					continue  # len vyprsal timeout, znovu cakaj na job
+				else:
+					return  # skonci, thread je ukonceny
+
+	def retire(self):
+		self._retire = True
+		if self._current_job:
+			self._current_job.cancel()
 
 	def _notify_no_jobs(self):
 		self.emit(QtCore.SIGNAL('nojobs'))
@@ -206,7 +230,6 @@ class settings_dialog(QtGui.QDialog, ui_settings.Ui_Settings):
 
 	def command_line(self):
 		return str(self.lineEditCmd.text())
-
 
 def main(args):
 	app = QtGui.QApplication(args)
