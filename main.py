@@ -1,5 +1,11 @@
 import sys, os, math, shlex, queue, threading, subprocess
 from PyQt4 import QtGui, QtCore
+import ui_settings
+
+# todo: ukonci vlakna pred skoncenim
+# todo: premenuj na dndconv (drag&drop convertor)
+# todo: pridaj notifikacie do desktop-menu
+# todo: implementuj file-dialog (v settingsoch)
 
 class main_window(QtGui.QMainWindow):
 	def __init__(self):
@@ -28,6 +34,9 @@ class main_window(QtGui.QMainWindow):
 		self._settings_act.triggered.connect(self._open_settings_dialog)
 		self.addAction(self._settings_act)
 		self.setContextMenuPolicy(QtCore.Qt.ActionsContextMenu)
+
+		# settings
+		self._settings_dlg = settings_dialog()
 
 		# concurent
 		self._jobs = queue.Queue()  # job queue
@@ -60,10 +69,15 @@ class main_window(QtGui.QMainWindow):
 		self._ndone_files += 1
 
 	def _create_extract_job(self, video_file):
-		out_dir = '/home/ja/temp/extract_test'
+		out_dir = os.path.expanduser(self._settings_dlg.output_directory())
 		out_file = os.path.join(out_dir,	os.path.splitext(os.path.basename(video_file))[0] + '.mp3')
-		profile = {'vfile':video_file, 'ofile':out_file}
-		cmdline = 'avconv -i "%(vfile)s" -f mp3 -ab 192000 -vn "%(ofile)s"' % profile
+		profile = {
+			'vfile':video_file,
+			'ofile':out_file,
+			'bitrate':self._settings_dlg.bitrate(),
+			'format':self._settings_dlg.format()
+		}
+		cmdline = 'avconv -i "%(vfile)s" -f %(format)s -ab %(bitrate)s -vn "%(ofile)s"' % profile
 		self._append_new_job(shlex.split(cmdline))
 
 	def _extract(self, videos):
@@ -85,9 +99,8 @@ class main_window(QtGui.QMainWindow):
 		self._jobs.put(job(command))
 
 	def _open_settings_dialog(self):
-		# todo: implement settings
-		pass
-
+		self._settings_dlg.setModal(True)
+		self._settings_dlg.show()
 
 class job:
 	def __init__(self, command):
@@ -176,6 +189,24 @@ class animated_widget(QtGui.QWidget):
 			ipart.setPixel(c, r, image.pixel(c, r))
 
 		painter.drawImage(QtCore.QPointF(point[0], point[1]), ipart)
+
+class settings_dialog(QtGui.QDialog, ui_settings.Ui_Settings):
+	def __init__(self):
+		QtGui.QDialog.__init__(self)
+		self.setupUi(self)
+
+	def bitrate(self):
+		return int(self.lineEditBitrate.text())*1000
+
+	def format(self):
+		return str(self.lineEditFormat.text())
+
+	def output_directory(self):
+		return str(self.lineEditDir.text())
+
+	def command_line(self):
+		return str(self.lineEditCmd.text())
+
 
 def main(args):
 	app = QtGui.QApplication(args)
