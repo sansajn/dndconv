@@ -5,8 +5,8 @@ import ui_settings
 
 # todo: ukladaj settingsi
 # todo: implementuj file-dialog (v settingsoch)
+# todo: prejdi na multiprocessing namiesto threading
 # todo: pridaj notifikacie do desktop-menu
-# todo: prejdi na multiprocessing
 
 class main_window(QtGui.QMainWindow):
 	def __init__(self):
@@ -64,6 +64,7 @@ class main_window(QtGui.QMainWindow):
 		QtGui.QMainWindow.closeEvent(self, event)
 
 	def _event_extraction_start(self):
+		self._ndone_files = 0
 		self._counter.setText('%d/%d' % (self._ndone_files, self._nfiles_to_extract))
 		self._animation.start_animation()
 
@@ -82,9 +83,10 @@ class main_window(QtGui.QMainWindow):
 			'vfile':video_file,
 			'ofile':out_file,
 			'bitrate':self._settings_dlg.bitrate(),
-			'format':self._settings_dlg.format()
+			'format':self._settings_dlg.format(),
+			'command_line':self._settings_dlg.command_line()
 		}
-		cmdline = 'avconv -i "%(vfile)s" -f %(format)s -ab %(bitrate)s -vn "%(ofile)s"' % profile
+		cmdline = 'avconv -i "%(vfile)s" -f %(format)s -ab %(bitrate)s %(command_line)s "%(ofile)s"' % profile
 		self._append_new_job(shlex.split(cmdline))
 
 	def _extract(self, videos):
