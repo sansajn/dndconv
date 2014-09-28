@@ -243,6 +243,10 @@ class settings_dialog(QtGui.QDialog, ui_settings.Ui_Settings):
 		self._save_settings()
 		QtGui.QDialog.hideEvent(self, event)
 
+	def on_pushButtonOutDir_released(self):
+		odir = QtGui.QFileDialog.getExistingDirectory()
+		self.lineEditDir.setText(odir)
+
 	def _save_settings(self):
 		s = \
 			"settings = {\n" \

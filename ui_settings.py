@@ -2,7 +2,7 @@
 
 # Form implementation generated from reading ui file 'settings.ui'
 #
-# Created: Sun Sep 28 13:28:50 2014
+# Created: Sun Sep 28 13:52:16 2014
 #      by: PyQt4 UI code generator 4.10.4
 #
 # WARNING! All changes made in this file will be lost!
@@ -42,10 +42,10 @@ class Ui_Settings(object):
         self.lineEditDir = QtGui.QLineEdit(self.formLayoutWidget)
         self.lineEditDir.setObjectName(_fromUtf8("lineEditDir"))
         self.horizontalLayout.addWidget(self.lineEditDir)
-        self.pushButton = QtGui.QPushButton(self.formLayoutWidget)
-        self.pushButton.setFlat(False)
-        self.pushButton.setObjectName(_fromUtf8("pushButton"))
-        self.horizontalLayout.addWidget(self.pushButton)
+        self.pushButtonOutDir = QtGui.QPushButton(self.formLayoutWidget)
+        self.pushButtonOutDir.setFlat(False)
+        self.pushButtonOutDir.setObjectName(_fromUtf8("pushButtonOutDir"))
+        self.horizontalLayout.addWidget(self.pushButtonOutDir)
         self.formLayout.setLayout(0, QtGui.QFormLayout.FieldRole, self.horizontalLayout)
         self.label_2 = QtGui.QLabel(self.formLayoutWidget)
         self.label_2.setObjectName(_fromUtf8("label_2"))
@@ -81,7 +81,7 @@ class Ui_Settings(object):
         Settings.setWindowTitle(_translate("Settings", "Settings", None))
         self.label.setText(_translate("Settings", "Output directory:", None))
         self.lineEditDir.setText(_translate("Settings", "~/temp/extract_test", None))
-        self.pushButton.setText(_translate("Settings", "...", None))
+        self.pushButtonOutDir.setText(_translate("Settings", "...", None))
         self.label_2.setText(_translate("Settings", "Bitrate (kbps):", None))
         self.lineEditBitrate.setText(_translate("Settings", "192", None))
         self.label_3.setText(_translate("Settings", "Format (mp3, aac, ogg):", None))
