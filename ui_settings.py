@@ -2,7 +2,7 @@
 
 # Form implementation generated from reading ui file 'settings.ui'
 #
-# Created: Fri Sep 26 23:03:00 2014
+# Created: Sun Sep 28 13:28:50 2014
 #      by: PyQt4 UI code generator 4.10.4
 #
 # WARNING! All changes made in this file will be lost!
@@ -60,7 +60,7 @@ class Ui_Settings(object):
         self.lineEditFormat.setObjectName(_fromUtf8("lineEditFormat"))
         self.formLayout.setWidget(2, QtGui.QFormLayout.FieldRole, self.lineEditFormat)
         self.verticalLayoutWidget = QtGui.QWidget(Settings)
-        self.verticalLayoutWidget.setGeometry(QtCore.QRect(10, 100, 381, 31))
+        self.verticalLayoutWidget.setGeometry(QtCore.QRect(10, 100, 381, 32))
         self.verticalLayoutWidget.setObjectName(_fromUtf8("verticalLayoutWidget"))
         self.verticalLayout = QtGui.QVBoxLayout(self.verticalLayoutWidget)
         self.verticalLayout.setMargin(0)
@@ -78,7 +78,7 @@ class Ui_Settings(object):
         QtCore.QMetaObject.connectSlotsByName(Settings)
 
     def retranslateUi(self, Settings):
-        Settings.setWindowTitle(_translate("Settings", "Dialog", None))
+        Settings.setWindowTitle(_translate("Settings", "Settings", None))
         self.label.setText(_translate("Settings", "Output directory:", None))
         self.lineEditDir.setText(_translate("Settings", "~/temp/extract_test", None))
         self.pushButton.setText(_translate("Settings", "...", None))

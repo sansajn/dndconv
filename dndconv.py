@@ -3,7 +3,6 @@ import sys, os, math, shlex, queue, threading, subprocess, multiprocessing
 from PyQt4 import QtGui, QtCore
 import ui_settings
 
-# todo: ukladaj settingsi
 # todo: implementuj file-dialog (v settingsoch)
 # todo: prejdi na multiprocessing namiesto threading
 # todo: pridaj notifikacie do desktop-menu
@@ -226,6 +225,7 @@ class settings_dialog(QtGui.QDialog, ui_settings.Ui_Settings):
 	def __init__(self):
 		QtGui.QDialog.__init__(self)
 		self.setupUi(self)
+		self._load_settings()
 
 	def bitrate(self):
 		return int(self.lineEditBitrate.text())*1000
@@ -238,6 +238,37 @@ class settings_dialog(QtGui.QDialog, ui_settings.Ui_Settings):
 
 	def command_line(self):
 		return str(self.lineEditCmd.text())
+
+	def hideEvent(self, event):
+		self._save_settings()
+		QtGui.QDialog.hideEvent(self, event)
+
+	def _save_settings(self):
+		s = \
+			"settings = {\n" \
+			"\t'output-directory':'%s',\n" \
+			"\t'bitrate':%s,\n" \
+			"\t'format':'%s',\n" \
+			"\t'command-line':'%s'\n" \
+			"}\n" % (self.output_directory(), int(self.lineEditBitrate.text()), self.format(), self.command_line())
+
+		with open(os.path.expanduser('~/.dndconv'), 'w') as fout:
+			fout.write(s)
+
+	def _load_settings(self):
+		loc = {}
+		glob = {}
+		try:
+			with open(os.path.expanduser('~/.dndconv')) as fin:
+				exec(fin.read(), glob, loc)
+
+			settings = loc['settings']
+			self.lineEditBitrate.setText(str(settings['bitrate']))
+			self.lineEditFormat.setText(settings['format'])
+			self.lineEditDir.setText(settings['output-directory'])
+			self.lineEditCmd.setText(settings['command-line'])
+		except OSError:
+			pass
 
 def main(args):
 	app = QtGui.QApplication(args)
