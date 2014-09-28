@@ -3,7 +3,6 @@ import sys, os, math, shlex, queue, threading, subprocess, multiprocessing
 from PyQt4 import QtGui, QtCore
 import ui_settings
 
-# todo: implementuj file-dialog (v settingsoch)
 # todo: prejdi na multiprocessing namiesto threading
 # todo: pridaj notifikacie do desktop-menu
 
