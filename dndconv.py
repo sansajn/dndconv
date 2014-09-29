@@ -1,9 +1,10 @@
 # dndconv (Drag&Drop convertor)
-import sys, os, math, shlex, queue, threading, subprocess, multiprocessing
+import sys, os, math, shlex, subprocess, multiprocessing
 from PyQt4 import QtGui, QtCore
 import ui_settings
 
-# todo: prejdi na multiprocessing namiesto threading
+# todo: rename ak uz existuje audio subor
+# todo: uprav pocet worker-ov pri drag&drop-e
 # todo: pridaj notifikacie do desktop-menu
 
 class main_window(QtGui.QMainWindow):
@@ -15,20 +16,24 @@ class main_window(QtGui.QMainWindow):
 
 		self._animation = animated_widget('audio-x-generic.png')
 
-		self._counter = QtGui.QLabel('Drag&Drop files here!')
-		self._counter.setAlignment(QtCore.Qt.AlignHCenter)
+		self._counter_label = QtGui.QLabel('Drag&Drop files here!')
+		self._counter_label.setAlignment(QtCore.Qt.AlignHCenter)
 
 		vbox = QtGui.QVBoxLayout()
 		vbox.addWidget(self._animation)
-		vbox.addWidget(self._counter)
+		vbox.addWidget(self._counter_label)
 		widget = QtGui.QWidget()
 		widget.setLayout(vbox)
 		self.setCentralWidget(widget)
 
-		self._nfiles_to_extract = 0
-		self._ndone_files = 0
+		tm = QtCore.QTimer()
+		tm.timeout.connect(self._event_gui_timer)
+		tm.start(1000/60)
+		self._gui_timer = tm
 
-		# actions
+		self._nfiles_to_extract = 0
+
+		# actions (context menu)
 		self._settings_act = QtGui.QAction('Settings ...', self)
 		self._settings_act.triggered.connect(self._open_settings_dialog)
 		self.addAction(self._settings_act)
@@ -38,41 +43,53 @@ class main_window(QtGui.QMainWindow):
 		self._settings_dlg = settings_dialog()
 
 		# concurent
-		self._jobs = queue.Queue()  # job queue
-		self._workers = self._hire_workers()
-		self._run_workers()
+		self._workers = None
+		self._job_queue = multiprocessing.Queue()
+		self._mgr = multiprocessing.Manager()
+		self._d = self._mgr.dict()
+		self._jobcounter = 0
 
 	def dropEvent(self, event):
 		'\param event je typu QDropEvent'
+		working = self._num_working_jobs() > 0
+
+		local_files = self._local_files(event)
+		if len(local_files) > 0:
+			jobs = self._create_extract_jobs(local_files)
+			for j in jobs:
+				self._job_queue.put(j)
+
+			if not working:
+				self._workers = self._hire_workers(len(jobs))
+				self._run_workers()
+				self._nfiles_to_extract = len(jobs)
+				self._event_extraction_start()
+			else:
+				self._nfiles_to_extract += len(jobs)
+
+	def _local_files(self, event):
 		mime = event.mimeData()
 		if mime.hasUrls():
 			urls = mime.urls()
-			local_files = [url.toLocalFile() for url in urls]
-			if len(local_files) > 0:
-				self._extract(local_files)
-				self._nfiles_to_extract = len(local_files)
-				self._event_extraction_start()
+			return [url.toLocalFile() for url in urls]
+		else:
+			return []
 
-	def dragEnterEvent(self, event):
-		event.acceptProposedAction()
+	def _hire_workers(self, njobs):
+		nworkers = min(max(multiprocessing.cpu_count(), 1), njobs)
+		workers = []
+		for n in range(0, nworkers):
+			w = multiprocessing.Process(target=worker_func, args=(self._job_queue, self._d))
+			workers.append(w)
+		return workers
 
-	def closeEvent(self, event):
+	def _run_workers(self):
 		for w in self._workers:
-			w.retire()
-		QtGui.QMainWindow.closeEvent(self, event)
+			w.start()
 
-	def _event_extraction_start(self):
-		self._ndone_files = 0
-		self._counter.setText('%d/%d' % (self._ndone_files, self._nfiles_to_extract))
-		self._animation.start_animation()
-
-	def _event_extraction_stop(self):
-		self._counter.setText('Done!')
-		self._animation.restore()
-
-	def _event_job_done(self):
-		self._ndone_files += 1
-		self._counter.setText('%d/%d' % (self._ndone_files, self._nfiles_to_extract))
+	def _create_extract_jobs(self, videos):
+		'vrati zoznam jobov'
+		return [self._create_extract_job(v) for v in videos]
 
 	def _create_extract_job(self, video_file):
 		out_dir = os.path.expanduser(self._settings_dlg.output_directory())
@@ -85,80 +102,83 @@ class main_window(QtGui.QMainWindow):
 			'command_line':self._settings_dlg.command_line()
 		}
 		cmdline = 'avconv -i "%(vfile)s" -f %(format)s -ab %(bitrate)s %(command_line)s "%(ofile)s"' % profile
-		self._append_new_job(shlex.split(cmdline))
+		self._jobcounter += 1
+		return job(self._jobcounter, shlex.split(cmdline))
 
-	def _extract(self, videos):
-		for v in videos:
-			self._create_extract_job(v)
+	def dragEnterEvent(self, event):
+		event.acceptProposedAction()
 
-	def _run_workers(self):
-		for w in self._workers:
-			w.start()
+	def closeEvent(self, event):
+		# terminate all alive processes
+		if self._workers:
+			for w in self._workers:
+				if w.is_alive():
+					w.terminate()
+		QtGui.QMainWindow.closeEvent(self, event)
 
-	def _hire_workers(self):
-		ncores = min(multiprocessing.cpu_count(), 1)
-		workers = []
-		for n in range(0, ncores):
-			w = worker(self._jobs)
-			self.connect(w, QtCore.SIGNAL('nojobs'), self._event_extraction_stop)
-			self.connect(w, QtCore.SIGNAL('jobdone'), self._event_job_done)
-			workers.append(w)
-		return workers
+	def _event_extraction_start(self):
+		self._animation.start_animation()
+		self._counter_label.setText('0/%d' % (self._nfiles_to_extract,))
 
-	def _append_new_job(self, command):
-		self._jobs.put(job(command))
+	def _event_extraction_stop(self):
+		self._animation.restore()
+		self._d.clear()
+		self._nfiles_to_extract = 0
+		self._counter_label.setText('Done!')
+		self._debug_check_workers_alive()
+
+	def _event_gui_timer(self):
+		if len(self._d) is 0:
+			return
+
+		ndone_files = self._num_done_jobs()
+		done = ndone_files is len(self._d)
+
+		if done:
+			self._event_extraction_stop()
+		else:
+			self._counter_label.setText('%d/%d' % (ndone_files, self._nfiles_to_extract))
+
+	def _num_done_jobs(self):
+		ndone_jobs = 0
+		for k, v in self._d.items():
+			if v:
+				ndone_jobs += 1
+		return ndone_jobs
+
+	def _num_working_jobs(self):
+		nwork_jobs = 0
+		for k, v in self._d.items():
+			if not v:
+				nwork_jobs += 1
+		return nwork_jobs
 
 	def _open_settings_dialog(self):
 		self._settings_dlg.setModal(True)
 		self._settings_dlg.show()
 
+	def _debug_check_workers_alive(self):
+		for w in self._workers:
+			assert not w.is_alive(), 'some workers is still alive'
+
 class job:
-	def __init__(self, command):
+	def __init__(self, jobid, command):
+		self._id = jobid
 		self._command = command
-		self._proc = None
 
 	def run(self):
-		self._proc = subprocess.Popen(self._command)
-		self._proc.wait()
-		self._proc = None
+		subproc = subprocess.Popen(self._command)
+		subproc.wait()
 
-	def cancel(self):
-		if self._proc:
-			self._proc.kill()
+	def id(self):
+		return self._id
 
-class worker(threading.Thread, QtCore.QObject):
-	'abstrakcia pre vlakno'
-	def __init__(self, jobs):
-		threading.Thread.__init__(self), QtCore.QObject.__init__(self)
-		self._jobs = jobs
-		self._current_job = None
-		self._retire = False
-
-	def run(self):
-		while not self._retire:
-			try:
-				j = self._jobs.get(timeout=1)
-				self._current_job = j
-				j.run()
-				self._notify_job_done()
-				if self._jobs.empty():
-					self._notify_no_jobs()
-			except queue.Empty as e:
-				if not self._retire:
-					continue  # len vyprsal timeout, znovu cakaj na job
-				else:
-					return  # skonci, thread je ukonceny
-
-	def retire(self):
-		self._retire = True
-		if self._current_job:
-			self._current_job.cancel()
-
-	def _notify_no_jobs(self):
-		self.emit(QtCore.SIGNAL('nojobs'))
-
-	def _notify_job_done(self):
-		self.emit(QtCore.SIGNAL('jobdone'))
+def worker_func(jobs, d):
+	while not jobs.empty():
+		j = jobs.get()
+		d[j.id()] = False  # working
+		j.run()
+		d[j.id()] = True  # done
 
 class animated_widget(QtGui.QWidget):
 	def __init__(self, image_name):
