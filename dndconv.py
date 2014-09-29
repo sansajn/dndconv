@@ -3,7 +3,6 @@ import sys, os, math, shlex, subprocess, multiprocessing
 from PyQt4 import QtGui, QtCore
 import ui_settings
 
-# todo: rename ak uz existuje audio subor
 # todo: uprav pocet worker-ov pri drag&drop-e
 # todo: pridaj notifikacie do desktop-menu
 
@@ -67,6 +66,17 @@ class main_window(QtGui.QMainWindow):
 			else:
 				self._nfiles_to_extract += len(jobs)
 
+	def dragEnterEvent(self, event):
+		event.acceptProposedAction()
+
+	def closeEvent(self, event):
+		# terminate all alive processes
+		if self._workers:
+			for w in self._workers:
+				if w.is_alive():
+					w.terminate()
+		QtGui.QMainWindow.closeEvent(self, event)
+
 	def _local_files(self, event):
 		mime = event.mimeData()
 		if mime.hasUrls():
@@ -91,9 +101,24 @@ class main_window(QtGui.QMainWindow):
 		'vrati zoznam jobov'
 		return [self._create_extract_job(v) for v in videos]
 
+	def _output_file_name(self, out_dir, video_file):
+		audio_name = os.path.splitext(os.path.basename(video_file))[0]
+		fname_path = os.path.join(out_dir, audio_name + '.mp3')
+		if os.path.exists(fname_path):
+			return self._generate_new_filename(out_dir, audio_name, 1)
+		else:
+			return fname_path
+
+	def _generate_new_filename(self, dst_path, audio_name, num):
+		audio_file = os.path.join(dst_path, audio_name+(' (%d)' % num)+'.mp3')
+		if os.path.exists(audio_file):
+			return self._generate_new_filename(dst_path, audio_name, num+1)
+		else:
+			return audio_file
+
 	def _create_extract_job(self, video_file):
 		out_dir = os.path.expanduser(self._settings_dlg.output_directory())
-		out_file = os.path.join(out_dir,	os.path.splitext(os.path.basename(video_file))[0] + '.mp3')
+		out_file = self._output_file_name(out_dir, video_file)
 		profile = {
 			'vfile':video_file,
 			'ofile':out_file,
@@ -104,17 +129,6 @@ class main_window(QtGui.QMainWindow):
 		cmdline = 'avconv -i "%(vfile)s" -f %(format)s -ab %(bitrate)s %(command_line)s "%(ofile)s"' % profile
 		self._jobcounter += 1
 		return job(self._jobcounter, shlex.split(cmdline))
-
-	def dragEnterEvent(self, event):
-		event.acceptProposedAction()
-
-	def closeEvent(self, event):
-		# terminate all alive processes
-		if self._workers:
-			for w in self._workers:
-				if w.is_alive():
-					w.terminate()
-		QtGui.QMainWindow.closeEvent(self, event)
 
 	def _event_extraction_start(self):
 		self._animation.start_animation()
@@ -158,8 +172,9 @@ class main_window(QtGui.QMainWindow):
 		self._settings_dlg.show()
 
 	def _debug_check_workers_alive(self):
-		for w in self._workers:
-			assert not w.is_alive(), 'some workers is still alive'
+		# for w in self._workers:
+		# 	assert not w.is_alive(), 'some workers are still alive'
+		pass
 
 class job:
 	def __init__(self, jobid, command):
