@@ -55,6 +55,8 @@ class main_window(QtGui.QMainWindow):
 		local_files = self._local_files(event)
 		if len(local_files) > 0:
 			jobs = self._create_extract_jobs(local_files)
+			if len(jobs) is 0:
+				return  # no jobs
 			for j in jobs:
 				self._job_queue.put(j)
 
@@ -66,9 +68,6 @@ class main_window(QtGui.QMainWindow):
 			else:
 				self._nfiles_to_extract += len(jobs)
 
-	def dragEnterEvent(self, event):
-		event.acceptProposedAction()
-
 	def closeEvent(self, event):
 		# terminate all alive processes
 		if self._workers:
@@ -76,6 +75,9 @@ class main_window(QtGui.QMainWindow):
 				if w.is_alive():
 					w.terminate()
 		QtGui.QMainWindow.closeEvent(self, event)
+
+	def dragEnterEvent(self, event):
+		event.acceptProposedAction()
 
 	def _local_files(self, event):
 		mime = event.mimeData()
@@ -99,22 +101,12 @@ class main_window(QtGui.QMainWindow):
 
 	def _create_extract_jobs(self, videos):
 		'vrati zoznam jobov'
-		return [self._create_extract_job(v) for v in videos]
-
-	def _output_file_name(self, out_dir, video_file):
-		audio_name = os.path.splitext(os.path.basename(video_file))[0]
-		fname_path = os.path.join(out_dir, audio_name + '.mp3')
-		if os.path.exists(fname_path):
-			return self._generate_new_filename(out_dir, audio_name, 1)
-		else:
-			return fname_path
-
-	def _generate_new_filename(self, dst_path, audio_name, num):
-		audio_file = os.path.join(dst_path, audio_name+(' (%d)' % num)+'.mp3')
-		if os.path.exists(audio_file):
-			return self._generate_new_filename(dst_path, audio_name, num+1)
-		else:
-			return audio_file
+		jobs = []
+		for v in videos:
+			j = self._create_extract_job(v)
+			if j:
+				jobs.append(j)
+		return jobs
 
 	def _create_extract_job(self, video_file):
 		out_dir = os.path.expanduser(self._settings_dlg.output_directory())
@@ -128,7 +120,16 @@ class main_window(QtGui.QMainWindow):
 		}
 		cmdline = 'avconv -i "%(vfile)s" -f %(format)s -ab %(bitrate)s %(command_line)s "%(ofile)s"' % profile
 		self._jobcounter += 1
-		return job(self._jobcounter, shlex.split(cmdline))
+
+		# todo: vlastny job na mazanie suborou
+		exists = os.path.exists(out_file)
+		overwrite = self._settings_dlg.overwrite()
+		if exists and overwrite is 0:  # yes
+			os.remove(out_file)
+		elif exists and overwrite is 2: # skip
+			return None  # no job needed
+
+		return extract_job(self._jobcounter, shlex.split(cmdline))
 
 	def _event_extraction_start(self):
 		self._animation.start_animation()
@@ -153,6 +154,22 @@ class main_window(QtGui.QMainWindow):
 		else:
 			self._counter_label.setText('%d/%d' % (ndone_files, self._nfiles_to_extract))
 
+	def _output_file_name(self, out_dir, video_file):
+		audio_name = os.path.splitext(os.path.basename(video_file))[0]
+		fname_path = os.path.join(out_dir, audio_name + '.mp3')
+		overwrite = self._settings_dlg.overwrite()
+		if os.path.exists(fname_path) and overwrite is 1:  # no
+			return self._generate_new_filename(out_dir, audio_name, 1)
+		else:
+			return fname_path
+
+	def _generate_new_filename(self, dst_path, audio_name, num):
+		audio_file = os.path.join(dst_path, audio_name+(' (%d)' % num)+'.mp3')
+		if os.path.exists(audio_file):
+			return self._generate_new_filename(dst_path, audio_name, num+1)
+		else:
+			return audio_file
+
 	def _num_done_jobs(self):
 		ndone_jobs = 0
 		for k, v in self._d.items():
@@ -176,7 +193,7 @@ class main_window(QtGui.QMainWindow):
 		# 	assert not w.is_alive(), 'some workers are still alive'
 		pass
 
-class job:
+class extract_job:
 	def __init__(self, jobid, command):
 		self._id = jobid
 		self._command = command
@@ -273,6 +290,9 @@ class settings_dialog(QtGui.QDialog, ui_settings.Ui_Settings):
 	def command_line(self):
 		return str(self.lineEditCmd.text())
 
+	def overwrite(self):
+		return self.comboBoxOverwrite.currentIndex()  # 0:yes, 1:no, 2:skip
+
 	def hideEvent(self, event):
 		self._save_settings()
 		QtGui.QDialog.hideEvent(self, event)
@@ -282,16 +302,16 @@ class settings_dialog(QtGui.QDialog, ui_settings.Ui_Settings):
 		self.lineEditDir.setText(odir)
 
 	def _save_settings(self):
-		s = \
-			"settings = {\n" \
-			"\t'output-directory':'%s',\n" \
-			"\t'bitrate':%s,\n" \
-			"\t'format':'%s',\n" \
-			"\t'command-line':'%s'\n" \
-			"}\n" % (self.output_directory(), int(self.lineEditBitrate.text()), self.format(), self.command_line())
+		settings = {
+			'output-directory':self.output_directory(),
+			'bitrate':int(self.bitrate()/1000),
+			'format':self.format(),
+			'command-line':self.command_line(),
+			'overwrite':self.overwrite()
+		}
 
 		with open(os.path.expanduser('~/.dndconv'), 'w') as fout:
-			fout.write(s)
+			fout.write('settings=' + str(settings))
 
 	def _load_settings(self):
 		loc = {}
@@ -301,12 +321,19 @@ class settings_dialog(QtGui.QDialog, ui_settings.Ui_Settings):
 				exec(fin.read(), glob, loc)
 
 			settings = loc['settings']
-			self.lineEditBitrate.setText(str(settings['bitrate']))
-			self.lineEditFormat.setText(settings['format'])
-			self.lineEditDir.setText(settings['output-directory'])
-			self.lineEditCmd.setText(settings['command-line'])
+			self.lineEditBitrate.setText(str(self._value(settings, 'bitrate', 192)))
+			self.lineEditFormat.setText(self._value(settings, 'format', 'mp3'))
+			self.lineEditDir.setText(self._value(settings, 'output-directory', '~'))
+			self.lineEditCmd.setText(self._value(settings, 'command-line', '-vn'))
+			self.comboBoxOverwrite.setCurrentIndex(self._value(settings, 'overwrite', 0))
 		except OSError:
 			pass
+
+	def _value(self, settings, key, default_value):
+		if key in settings:
+			return settings[key]
+		else:
+			return default_value
 
 def main(args):
 	app = QtGui.QApplication(args)
