@@ -1,5 +1,32 @@
 # DnDConv
 
+Audio stream extraction utility from mp4 (youtube) video files.
+
+## Usage
+
+	$ python3 dndconv.py
+
+## Settings
+
+Program setting are stored in '~/.dndconv' file.
+
+## Dependencies
+
+These packages are required tu run DnDConv
+
+	libav-tools
+	python3
+	python3-pyqt4
+
+bash command (kubuntu 14.04)
+
+	$ sudo apt-get install libav-tools python3 python3-pyqt4
+
+
+
+
+# DnDConv
+
 Utilita umožnujúca extrakciu audio stopy s mp4 (youtube) videií.
 
 ## Spustenie
